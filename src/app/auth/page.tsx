@@ -1,3 +1,5 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -15,8 +17,33 @@ import { MdOutlineAutoAwesome } from "react-icons/md";
 import { RxGithubLogo } from "react-icons/rx";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Provider } from "@supabase/supabase-js";
+import { supabaseBrowserClient } from "@/supabase/supabaseClient";
+import { useEffect, useState } from "react";
+import { registerWithEmail } from "@/actions/register-with-email";
+import { useRouter } from "next/navigation";
 
 const AuthPage = () => {
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  const router = useRouter();
+
+  useEffect(() => {
+    const getCurrUser = async () => {
+      const {
+        data: { session },
+      } = await supabaseBrowserClient.auth.getSession();
+      console.log(session);
+
+      if (session) {
+        return router.push("/");
+      }
+    };
+
+    getCurrUser();
+    setIsMounted(true);
+  }, [router]);
   const formSchema = z.object({
     email: z.string().email().min(2, { message: "Email must be 2 characters" }),
   });
@@ -29,7 +56,30 @@ const AuthPage = () => {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values);
+    setIsAuthenticating(true);
+    const response = await registerWithEmail(values);
+    const { data, error } = JSON.parse(response);
+    setIsAuthenticating(false);
+    console.log(data);
+    if (error) {
+      console.warn("Sign in error", error);
+      return;
+    }
+  }
+
+  async function socialAuth(provider: Provider) {
+    setIsAuthenticating(true);
+    await supabaseBrowserClient.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${location.origin}/auth/callback`,
+      },
+    });
+    setIsAuthenticating(false);
+  }
+
+  if (!isMounted) {
+    return null;
   }
 
   return (
@@ -54,10 +104,10 @@ const AuthPage = () => {
 
         <div className="flex flex-col space-y-4">
           <Button
-            // disabled={isAuthenticating}
+            disabled={isAuthenticating}
             variant="outline"
             className="py-6 border-2 flex space-x-3"
-            // onClick={() => socialAuth('google')}
+            onClick={() => socialAuth("google")}
           >
             <FcGoogle size={30} />
             <Typography
@@ -67,10 +117,10 @@ const AuthPage = () => {
             />
           </Button>
           <Button
-            // disabled={isAuthenticating}
+            disabled={isAuthenticating}
             variant="outline"
             className="py-6 border-2 flex space-x-3"
-            // onClick={() => socialAuth('github')}
+            onClick={() => socialAuth("github")}
           >
             <RxGithubLogo size={30} />
             <Typography
@@ -90,7 +140,7 @@ const AuthPage = () => {
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)}>
-              <fieldset>
+              <fieldset disabled={isAuthenticating}>
                 <FormField
                   control={form.control}
                   name="email"
